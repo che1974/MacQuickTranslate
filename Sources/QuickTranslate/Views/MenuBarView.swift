@@ -62,6 +62,22 @@ struct MenuBarView: View {
                 .labelsHidden()
             }
 
+            // Style picker (only for text prompt models)
+            if translationService.currentModelConfig.supportsStyles {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Style")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Picker("Style", selection: $appState.translationStyle) {
+                        ForEach(TranslationStyle.allCases) { style in
+                            Text(style.rawValue).tag(style)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                }
+            }
+
             Text("Hotkey: ⌘⇧T")
                 .font(.caption)
                 .foregroundColor(.secondary)

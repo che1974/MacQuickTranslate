@@ -6,6 +6,7 @@ struct TranslationPopupView: View {
     let targetLanguage: Language
     let onDismiss: () -> Void
     let onCopy: () -> Void
+    let onReplace: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -54,12 +55,21 @@ struct TranslationPopupView: View {
                 }
             }
 
-            // Bottom bar: copy button + char count
+            // Bottom bar
             HStack {
                 Text("\(translationService.translatedText.count) chars")
                     .font(.caption2)
                     .foregroundColor(.secondary)
                 Spacer()
+                Button(action: onReplace) {
+                    Label("Replace", systemImage: "arrow.turn.down.left")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(translationService.translatedText.isEmpty)
+                .help("Paste translation into the source app")
+
                 Button(action: onCopy) {
                     Label("Copy", systemImage: "doc.on.doc")
                         .font(.caption)

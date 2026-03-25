@@ -5,6 +5,7 @@ class AppState: ObservableObject {
     @Published var targetLanguage: Language = .english
     @Published var autoDetectSource: Bool = true
     @Published var sourceLanguageOverride: Language = .russian
+    @Published var translationStyle: TranslationStyle = .standard
     let history = TranslationHistory()
 
     private let translationService: TranslationService
@@ -77,7 +78,7 @@ class AppState: ObservableObject {
             await translationService.loadModel()
         }
 
-        await translationService.translate(text, from: source, to: target)
+        await translationService.translate(text, from: source, to: target, style: translationStyle)
 
         if translationService.error == nil && !translationService.translatedText.isEmpty {
             history.add(

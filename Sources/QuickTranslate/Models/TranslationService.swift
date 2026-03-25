@@ -73,7 +73,7 @@ class TranslationService: ObservableObject {
         modelState = .notLoaded
     }
 
-    func translate(_ text: String, from source: Language, to target: Language) async {
+    func translate(_ text: String, from source: Language, to target: Language, style: TranslationStyle = .standard) async {
         guard let container = modelContainer, modelState == .ready else {
             error = .modelNotLoaded
             return
@@ -91,7 +91,7 @@ class TranslationService: ObservableObject {
             warning = "Text is very long (\(wordCount) words). Translation may be truncated."
         }
 
-        let userInput = currentModelConfig.buildInput(text: text, from: source, to: target)
+        let userInput = currentModelConfig.buildInput(text: text, from: source, to: target, style: style)
 
         do {
             try await container.perform { context in

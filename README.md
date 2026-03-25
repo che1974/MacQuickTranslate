@@ -46,6 +46,8 @@ MLX on Metal GPU gives us the full HuggingFace ecosystem, simple model switching
 - **Auto language detection** — Cyrillic, Greek, Latin script analysis
 - **Streaming output** — translation appears token by token in real-time
 - **Multi-model support** — Gemma 2 2B (1.5 GB, light) or TranslateGemma 4B/12B (specialized)
+- **Translation styles** — Standard, Casual, Formal, Technical, Creative (Gemma models)
+- **Replace text** — paste translation directly into the source app with one click
 - **Lazy loading** — model loads on first use, unloads after 5 min idle to free memory
 - **Floating popup** — translucent panel with vibrancy, scrollable, positioned near cursor
 - **Translation history** — last 10 translations accessible from menu bar

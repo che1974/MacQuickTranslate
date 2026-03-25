@@ -2,10 +2,33 @@ import Foundation
 import MLXLMCommon
 
 enum PromptStrategy {
-    /// TranslateGemma structured message format with source/target lang codes
     case translateGemma
-    /// General-purpose LLM with text prompt
     case textPrompt
+}
+
+enum TranslationStyle: String, CaseIterable, Identifiable {
+    case standard = "Standard"
+    case casual = "Casual"
+    case formal = "Formal"
+    case technical = "Technical"
+    case creative = "Creative"
+
+    var id: String { rawValue }
+
+    var promptInstruction: String {
+        switch self {
+        case .standard:
+            return "Output ONLY the translation, nothing else."
+        case .casual:
+            return "Use casual, conversational tone. Output ONLY the translation, nothing else."
+        case .formal:
+            return "Use formal, professional tone suitable for business correspondence. Output ONLY the translation, nothing else."
+        case .technical:
+            return "Preserve all technical terms, abbreviations, and domain-specific vocabulary. Output ONLY the translation, nothing else."
+        case .creative:
+            return "Use expressive, literary language while preserving the original meaning. Output ONLY the translation, nothing else."
+        }
+    }
 }
 
 struct TranslationModelConfig: Identifiable, Hashable {
@@ -15,19 +38,21 @@ struct TranslationModelConfig: Identifiable, Hashable {
     let sizeLabel: String
     let promptStrategy: PromptStrategy
 
+    /// Whether this model supports translation styles
+    var supportsStyles: Bool { promptStrategy == .textPrompt }
+
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
     static func == (lhs: Self, rhs: Self) -> Bool { lhs.id == rhs.id }
 
-    func buildInput(text: String, from source: Language, to target: Language) -> UserInput {
+    func buildInput(text: String, from source: Language, to target: Language, style: TranslationStyle = .standard) -> UserInput {
         switch promptStrategy {
         case .translateGemma:
             return buildTranslateGemmaInput(text: text, from: source, to: target)
         case .textPrompt:
-            return buildTextPromptInput(text: text, from: source, to: target)
+            return buildTextPromptInput(text: text, from: source, to: target, style: style)
         }
     }
 
-    /// TranslateGemma structured message format
     private func buildTranslateGemmaInput(text: String, from source: Language, to target: Language) -> UserInput {
         let messages: [Message] = [
             [
@@ -45,11 +70,10 @@ struct TranslationModelConfig: Identifiable, Hashable {
         return UserInput(messages: messages)
     }
 
-    /// General LLM text prompt for translation
-    private func buildTextPromptInput(text: String, from source: Language, to target: Language) -> UserInput {
+    private func buildTextPromptInput(text: String, from source: Language, to target: Language, style: TranslationStyle) -> UserInput {
         let prompt = """
         Translate the following \(source.name) text to \(target.name). \
-        Output ONLY the translation, nothing else.
+        \(style.promptInstruction)
 
         \(text)
         """
