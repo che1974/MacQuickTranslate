@@ -1,5 +1,7 @@
 # MacQuickTranslate
 
+> **Apple Silicon only.** This app uses [MLX](https://github.com/ml-explore/mlx) which requires Metal GPU on Apple Silicon (M1/M2/M3/M4). It will not run on Intel Macs.
+
 Native macOS menu bar app for instant translation across 37 European languages. Runs entirely on-device using Apple MLX — no servers, no API keys, no internet required after the initial model download.
 
 Select text anywhere, press **⌘⇧T**, get the translation in a floating popup near your cursor.
@@ -60,13 +62,20 @@ MLX on Metal GPU gives us the full HuggingFace ecosystem, simple model switching
 
 ```bash
 # Metal shaders require xcodebuild (not plain swift build)
-xcodebuild -scheme MacQuickTranslate -destination 'platform=macOS' build
+xcodebuild -scheme QuickTranslate -destination 'platform=macOS' -configuration Release -derivedDataPath .build/xcode build
+
+# Run
+.build/xcode/Build/Products/Release/QuickTranslate
 
 # Or open in Xcode
 open Package.swift
 ```
 
 On first translation the app downloads the selected model from HuggingFace (~2.2 GB for default) and requests Accessibility permission (System Settings → Privacy & Security → Accessibility).
+
+### Prebuilt release
+
+Download the latest `.dmg` from [Releases](https://github.com/che1974/MacQuickTranslate/releases). Open the DMG, drag the app anywhere, and run it.
 
 ## Usage
 

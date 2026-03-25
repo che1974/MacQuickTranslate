@@ -1,0 +1,54 @@
+name: Build Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.app
+
+      - name: Resolve dependencies
+        run: xcodebuild -resolvePackageDependencies -scheme QuickTranslate -destination 'platform=macOS'
+
+      - name: Build release
+        run: |
+          xcodebuild -scheme QuickTranslate \
+            -destination 'platform=macOS,arch=arm64' \
+            -configuration Release \
+            -derivedDataPath .build/xcode \
+            build
+
+      - name: Create app bundle
+        run: |
+          mkdir -p MacQuickTranslate.app/Contents/MacOS
+          mkdir -p MacQuickTranslate.app/Contents/Resources
+          cp .build/xcode/Build/Products/Release/QuickTranslate MacQuickTranslate.app/Contents/MacOS/
+          cp Resources/Info.plist MacQuickTranslate.app/Contents/
+
+      - name: Create DMG
+        run: |
+          hdiutil create -volname "MacQuickTranslate" \
+            -srcfolder MacQuickTranslate.app \
+            -ov -format UDZO \
+            MacQuickTranslate.dmg
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MacQuickTranslate
+          path: MacQuickTranslate.dmg
+
+      - name: Create release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: MacQuickTranslate.dmg
+          generate_release_notes: true
