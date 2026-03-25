@@ -1,14 +1,10 @@
 import SwiftUI
 
-enum DirectionOverride: String, CaseIterable {
-    case auto = "Auto"
-    case ruToEn = "RU → EN"
-    case enToRu = "EN → RU"
-}
-
 @MainActor
 class AppState: ObservableObject {
-    @Published var directionOverride: DirectionOverride = .auto
+    @Published var targetLanguage: Language = .english
+    @Published var autoDetectSource: Bool = true
+    @Published var sourceLanguageOverride: Language = .russian
     let history = TranslationHistory()
 
     private let translationService: TranslationService
@@ -47,7 +43,7 @@ class AppState: ObservableObject {
             popupManager.show(
                 translationService: translationService,
                 sourceLanguage: .english,
-                targetLanguage: .russian
+                targetLanguage: targetLanguage
             )
             Task {
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
@@ -56,35 +52,33 @@ class AppState: ObservableObject {
             return
         }
 
-        let (sourceLanguage, targetLanguage) = resolveDirection(for: text)
+        let source: Language
+        if autoDetectSource {
+            source = Language.detect(text)
+        } else {
+            source = sourceLanguageOverride
+        }
+
+        // If source == target, flip to a sensible default
+        let target = (source == targetLanguage)
+            ? (source == .english ? Language.russian : Language.english)
+            : targetLanguage
 
         popupManager.show(
             translationService: translationService,
-            sourceLanguage: sourceLanguage,
-            targetLanguage: targetLanguage
+            sourceLanguage: source,
+            targetLanguage: target
         )
 
-        await translationService.translate(text, from: sourceLanguage, to: targetLanguage)
+        await translationService.translate(text, from: source, to: target)
 
         if translationService.error == nil && !translationService.translatedText.isEmpty {
             history.add(
                 source: text,
                 translation: translationService.translatedText,
-                from: sourceLanguage,
-                to: targetLanguage
+                from: source,
+                to: target
             )
-        }
-    }
-
-    private func resolveDirection(for text: String) -> (Language, Language) {
-        switch directionOverride {
-        case .auto:
-            let source = LanguageDetector.detect(text)
-            return (source, source.opposite)
-        case .ruToEn:
-            return (.russian, .english)
-        case .enToRu:
-            return (.english, .russian)
         }
     }
 

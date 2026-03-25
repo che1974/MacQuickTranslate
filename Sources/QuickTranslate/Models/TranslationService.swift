@@ -85,14 +85,18 @@ class TranslationService: ObservableObject {
             warning = "Text is very long (\(wordCount) words). Translation may be truncated."
         }
 
-        let prompt = currentModelConfig.buildPrompt(text: text, from: source, to: target)
+        let userInput = currentModelConfig.buildInput(text: text, from: source, to: target)
 
         do {
             try await container.perform { context in
                 let input = try await context.processor.prepare(
-                    input: .init(prompt: prompt)
+                    input: userInput
                 )
-                let params = GenerateParameters(temperature: 0.0)
+                let params = GenerateParameters(
+                    maxTokens: 2048,
+                    temperature: 0.0,
+                    repetitionPenalty: 1.2
+                )
 
                 let stream = try MLXLMCommon.generate(
                     input: input, parameters: params, context: context
@@ -101,6 +105,8 @@ class TranslationService: ObservableObject {
                 for try await result in stream {
                     if Task.isCancelled { break }
                     if let chunk = result.chunk {
+                        // Stop on end-of-turn token leaked into text
+                        if chunk.contains("<end_of_turn>") { break }
                         await MainActor.run {
                             self.translatedText += chunk
                         }
@@ -112,7 +118,10 @@ class TranslationService: ObservableObject {
                 if self.translatedText.isEmpty && self.error == nil {
                     self.error = .emptyResponse
                 }
-                self.translatedText = self.translatedText.trimmingCharacters(in: .whitespacesAndNewlines)
+                // Strip any leaked special tokens and whitespace
+                self.translatedText = self.translatedText
+                    .replacingOccurrences(of: "<end_of_turn>", with: "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
                 self.isTranslating = false
             }
         } catch {
@@ -129,5 +138,50 @@ class TranslationService: ObservableObject {
         currentTask?.cancel()
         currentTask = nil
         isTranslating = false
+    }
+
+    // MARK: - Model cache management
+
+    /// Get the HuggingFace cache directory for a model
+    static func cacheDir(for config: TranslationModelConfig) -> URL? {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let hfCache = home.appendingPathComponent(".cache/huggingface/hub")
+        let modelDir = "models--" + config.huggingFaceId.replacingOccurrences(of: "/", with: "--")
+        let path = hfCache.appendingPathComponent(modelDir)
+        return FileManager.default.fileExists(atPath: path.path) ? path : nil
+    }
+
+    /// Calculate cache size for a model
+    static func cacheSize(for config: TranslationModelConfig) -> Int64 {
+        guard let dir = cacheDir(for: config) else { return 0 }
+        let enumerator = FileManager.default.enumerator(at: dir, includingPropertiesForKeys: [.fileSizeKey])
+        var total: Int64 = 0
+        while let url = enumerator?.nextObject() as? URL {
+            if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize {
+                total += Int64(size)
+            }
+        }
+        return total
+    }
+
+    /// Delete cached model files
+    func deleteModelCache(for config: TranslationModelConfig) {
+        // Unload if it's the current model
+        if config == currentModelConfig {
+            cancelTranslation()
+            modelContainer = nil
+            modelState = .notLoaded
+        }
+        guard let dir = Self.cacheDir(for: config) else { return }
+        try? FileManager.default.removeItem(at: dir)
+    }
+
+    /// Format bytes to human readable string
+    static func formatBytes(_ bytes: Int64) -> String {
+        if bytes == 0 { return "Not downloaded" }
+        let gb = Double(bytes) / 1_073_741_824
+        if gb >= 1.0 { return String(format: "%.1f GB", gb) }
+        let mb = Double(bytes) / 1_048_576
+        return String(format: "%.0f MB", mb)
     }
 }

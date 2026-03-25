@@ -31,16 +31,34 @@ struct MenuBarView: View {
                 .disabled(translationService.isTranslating)
             }
 
-            // Direction override
-            HStack {
-                Text("Direction:")
+            // Target language
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Translate to")
                     .font(.caption)
-                Picker("", selection: $appState.directionOverride) {
-                    ForEach(DirectionOverride.allCases, id: \.self) { option in
-                        Text(option.rawValue).tag(option)
+                    .foregroundColor(.secondary)
+                Picker("Target", selection: $appState.targetLanguage) {
+                    ForEach(Language.allLanguages) { lang in
+                        Text("\(lang.nativeName) (\(lang.name))").tag(lang)
                     }
                 }
-                .pickerStyle(.segmented)
+                .pickerStyle(.menu)
+                .labelsHidden()
+            }
+
+            // Source language
+            HStack {
+                Toggle("Auto-detect source", isOn: $appState.autoDetectSource)
+                    .font(.caption)
+                    .toggleStyle(.checkbox)
+            }
+
+            if !appState.autoDetectSource {
+                Picker("Source", selection: $appState.sourceLanguageOverride) {
+                    ForEach(Language.allLanguages) { lang in
+                        Text("\(lang.nativeName)").tag(lang)
+                    }
+                }
+                .pickerStyle(.menu)
                 .labelsHidden()
             }
 
@@ -57,12 +75,10 @@ struct MenuBarView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                     Spacer()
-                    Button("Clear") {
-                        appState.history.clear()
-                    }
-                    .font(.caption2)
-                    .buttonStyle(.plain)
-                    .foregroundColor(.secondary)
+                    Button("Clear") { appState.history.clear() }
+                        .font(.caption2)
+                        .buttonStyle(.plain)
+                        .foregroundColor(.secondary)
                 }
 
                 ScrollView {
@@ -72,8 +88,20 @@ struct MenuBarView: View {
                         }
                     }
                 }
-                .frame(maxHeight: 200)
+                .frame(maxHeight: 150)
             }
+
+            Divider()
+
+            // Model management
+            DisclosureGroup("Model Storage") {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(TranslationModelConfig.allModels) { model in
+                        ModelCacheRow(model: model, translationService: translationService)
+                    }
+                }
+            }
+            .font(.caption)
 
             Divider()
 
@@ -82,7 +110,40 @@ struct MenuBarView: View {
             }
         }
         .padding(12)
-        .frame(width: 280)
+        .frame(width: 300)
+    }
+}
+
+struct ModelCacheRow: View {
+    let model: TranslationModelConfig
+    @ObservedObject var translationService: TranslationService
+    @State private var cacheSize: Int64 = 0
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(model.displayName)
+                    .font(.caption)
+                Text(TranslationService.formatBytes(cacheSize))
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            Spacer()
+            if cacheSize > 0 {
+                Button("Delete") {
+                    translationService.deleteModelCache(for: model)
+                    refreshSize()
+                }
+                .font(.caption2)
+                .foregroundColor(.red)
+                .buttonStyle(.plain)
+            }
+        }
+        .onAppear { refreshSize() }
+    }
+
+    private func refreshSize() {
+        cacheSize = TranslationService.cacheSize(for: model)
     }
 }
 
