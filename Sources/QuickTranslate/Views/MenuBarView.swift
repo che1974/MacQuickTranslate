@@ -6,14 +6,8 @@ struct MenuBarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            // Connection status
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(appState.isOllamaConnected ? Color.green : Color.red)
-                    .frame(width: 8, height: 8)
-                Text(appState.isOllamaConnected ? "Ollama connected" : "Ollama not running")
-                    .font(.callout)
-            }
+            // Model status
+            ModelStatusView(state: translationService.modelState)
 
             Divider()
 
@@ -23,19 +17,18 @@ struct MenuBarView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
                 Picker("Model", selection: Binding(
-                    get: { translationService.currentModel.id },
-                    set: { newId in
-                        if let model = TranslationService.availableModels.first(where: { $0.id == newId }) {
-                            translationService.switchModel(model)
-                        }
+                    get: { translationService.currentModelConfig },
+                    set: { newConfig in
+                        Task { await translationService.switchModel(newConfig) }
                     }
                 )) {
-                    ForEach(TranslationService.availableModels, id: \.id) { model in
-                        Text(model.displayName).tag(model.id)
+                    ForEach(TranslationModelConfig.allModels) { model in
+                        Text("\(model.displayName) (\(model.sizeLabel))").tag(model)
                     }
                 }
                 .pickerStyle(.menu)
                 .labelsHidden()
+                .disabled(translationService.isTranslating)
             }
 
             // Direction override
@@ -89,7 +82,42 @@ struct MenuBarView: View {
             }
         }
         .padding(12)
-        .frame(width: 260)
+        .frame(width: 280)
+    }
+}
+
+struct ModelStatusView: View {
+    let state: ModelState
+
+    var body: some View {
+        HStack(spacing: 6) {
+            switch state {
+            case .notLoaded:
+                Circle().fill(Color.gray).frame(width: 8, height: 8)
+                Text("Model not loaded")
+                    .font(.callout)
+            case .downloading(let progress):
+                ProgressView(value: progress)
+                    .frame(width: 60)
+                Text("Downloading \(Int(progress * 100))%")
+                    .font(.callout)
+            case .loading:
+                ProgressView()
+                    .controlSize(.small)
+                Text("Loading model...")
+                    .font(.callout)
+            case .ready:
+                Circle().fill(Color.green).frame(width: 8, height: 8)
+                Text("Model ready")
+                    .font(.callout)
+            case .error(let msg):
+                Circle().fill(Color.red).frame(width: 8, height: 8)
+                Text(msg)
+                    .font(.caption)
+                    .foregroundColor(.red)
+                    .lineLimit(2)
+            }
+        }
     }
 }
 

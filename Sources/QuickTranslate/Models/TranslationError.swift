@@ -1,25 +1,22 @@
 import Foundation
 
 enum TranslationError: LocalizedError {
-    case connectionRefused
-    case modelNotFound(String)
-    case timeout
+    case modelNotLoaded
     case emptyResponse
     case noTextSelected
+    case timeout
     case unknown(String)
 
     var errorDescription: String? {
         switch self {
-        case .connectionRefused:
-            return "Ollama is not running. Start it with: ollama serve"
-        case .modelNotFound(let model):
-            return "Model not installed. Run: ollama pull \(model)"
-        case .timeout:
-            return "Translation timed out. Text may be too long."
+        case .modelNotLoaded:
+            return "Model is not loaded yet. Please wait for download to complete."
         case .emptyResponse:
             return "No translation received. Try again."
         case .noTextSelected:
             return "No text selected"
+        case .timeout:
+            return "Translation timed out. Text may be too long."
         case .unknown(let message):
             return message
         }

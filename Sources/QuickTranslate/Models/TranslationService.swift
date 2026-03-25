@@ -1,4 +1,24 @@
 import Foundation
+import MLX
+import MLXLLM
+import MLXLMCommon
+
+enum ModelState: Equatable {
+    case notLoaded
+    case downloading(progress: Double)
+    case loading
+    case ready
+    case error(String)
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        switch (lhs, rhs) {
+        case (.notLoaded, .notLoaded), (.loading, .loading), (.ready, .ready): return true
+        case (.downloading(let a), .downloading(let b)): return a == b
+        case (.error(let a), .error(let b)): return a == b
+        default: return false
+        }
+    }
+}
 
 @MainActor
 class TranslationService: ObservableObject {
@@ -6,26 +26,53 @@ class TranslationService: ObservableObject {
     @Published var isTranslating: Bool = false
     @Published var error: TranslationError?
     @Published var warning: String?
-    @Published var currentModel: any TranslationModel
+    @Published var modelState: ModelState = .notLoaded
+    @Published var currentModelConfig: TranslationModelConfig
 
-    static let availableModels: [any TranslationModel] = [
-        TranslateGemmaModel(),
-        OpusMTModel(),
-    ]
-
-    private let baseURL = URL(string: "http://localhost:11434")!
+    private var modelContainer: ModelContainer?
     private var currentTask: Task<Void, Never>?
 
-    init(model: (any TranslationModel)? = nil) {
-        self.currentModel = model ?? Self.availableModels[0]
+    init(model: TranslationModelConfig = .translateGemma4B) {
+        self.currentModelConfig = model
     }
 
-    func switchModel(_ model: any TranslationModel) {
+    func loadModel() async {
+        guard modelState != .ready && modelState != .loading else { return }
+
+        modelState = .loading
+
+        do {
+            let config = ModelConfiguration(id: currentModelConfig.huggingFaceId)
+
+            let container = try await LLMModelFactory.shared.loadContainer(
+                configuration: config
+            ) { progress in
+                Task { @MainActor in
+                    self.modelState = .downloading(progress: progress.fractionCompleted)
+                }
+            }
+
+            self.modelContainer = container
+            modelState = .ready
+        } catch {
+            modelState = .error(error.localizedDescription)
+        }
+    }
+
+    func switchModel(_ config: TranslationModelConfig) async {
         cancelTranslation()
-        currentModel = model
+        modelContainer = nil
+        currentModelConfig = config
+        modelState = .notLoaded
+        await loadModel()
     }
 
     func translate(_ text: String, from source: Language, to target: Language) async {
+        guard let container = modelContainer, modelState == .ready else {
+            error = .modelNotLoaded
+            return
+        }
+
         currentTask?.cancel()
 
         isTranslating = true
@@ -38,94 +85,49 @@ class TranslationService: ObservableObject {
             warning = "Text is very long (\(wordCount) words). Translation may be truncated."
         }
 
-        let body = currentModel.buildRequestBody(text: text, from: source, to: target)
-
-        var request = URLRequest(url: baseURL.appendingPathComponent("api/chat"))
-        request.httpMethod = "POST"
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 30
+        let prompt = currentModelConfig.buildPrompt(text: text, from: source, to: target)
 
         do {
-            let (bytes, response) = try await URLSession.shared.bytes(for: request)
+            try await container.perform { context in
+                let input = try await context.processor.prepare(
+                    input: .init(prompt: prompt)
+                )
+                let params = GenerateParameters(temperature: 0.0)
 
-            guard let httpResponse = response as? HTTPURLResponse else {
-                error = .unknown("Invalid response")
-                isTranslating = false
-                return
+                let stream = try MLXLMCommon.generate(
+                    input: input, parameters: params, context: context
+                )
+
+                for try await result in stream {
+                    if Task.isCancelled { break }
+                    if let chunk = result.chunk {
+                        await MainActor.run {
+                            self.translatedText += chunk
+                        }
+                    }
+                }
             }
 
-            if httpResponse.statusCode == 404 {
-                error = .modelNotFound(currentModel.ollamaModel)
-                isTranslating = false
-                return
-            }
-
-            for try await line in bytes.lines {
-                if Task.isCancelled { break }
-
-                guard let data = line.data(using: .utf8),
-                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                      let parsed = currentModel.parseStreamChunk(json)
-                else { continue }
-
-                translatedText += parsed.content
-                if parsed.done { break }
-            }
-
-            if translatedText.isEmpty && error == nil {
-                error = .emptyResponse
-            }
-
-            translatedText = translatedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        } catch let urlError as URLError {
-            switch urlError.code {
-            case .cannotConnectToHost, .networkConnectionLost:
-                error = .connectionRefused
-            case .timedOut:
-                error = .timeout
-            default:
-                error = .unknown(urlError.localizedDescription)
+            await MainActor.run {
+                if self.translatedText.isEmpty && self.error == nil {
+                    self.error = .emptyResponse
+                }
+                self.translatedText = self.translatedText.trimmingCharacters(in: .whitespacesAndNewlines)
+                self.isTranslating = false
             }
         } catch {
-            if !Task.isCancelled {
-                self.error = .unknown(error.localizedDescription)
+            await MainActor.run {
+                if !Task.isCancelled {
+                    self.error = .unknown(error.localizedDescription)
+                }
+                self.isTranslating = false
             }
         }
-
-        isTranslating = false
     }
 
     func cancelTranslation() {
         currentTask?.cancel()
         currentTask = nil
         isTranslating = false
-    }
-
-    func checkConnection() async -> Bool {
-        var request = URLRequest(url: baseURL.appendingPathComponent("api/tags"))
-        request.timeoutInterval = 5
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            return (response as? HTTPURLResponse)?.statusCode == 200
-        } catch {
-            return false
-        }
-    }
-
-    /// Check if a specific model is available in Ollama
-    func checkModelAvailable(_ modelTag: String) async -> Bool {
-        var request = URLRequest(url: baseURL.appendingPathComponent("api/tags"))
-        request.timeoutInterval = 5
-        do {
-            let (data, _) = try await URLSession.shared.data(for: request)
-            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let models = json["models"] as? [[String: Any]] else {
-                return false
-            }
-            return models.contains { ($0["name"] as? String)?.hasPrefix(modelTag) == true }
-        } catch {
-            return false
-        }
     }
 }

@@ -8,7 +8,6 @@ enum DirectionOverride: String, CaseIterable {
 
 @MainActor
 class AppState: ObservableObject {
-    @Published var isOllamaConnected: Bool = false
     @Published var directionOverride: DirectionOverride = .auto
     let history = TranslationHistory()
 
@@ -16,7 +15,6 @@ class AppState: ObservableObject {
     private let hotkeyManager = HotkeyManager()
     private let clipboardManager = ClipboardManager()
     private let popupManager = PopupWindowManager()
-    private var connectionCheckTask: Task<Void, Never>?
 
     init(translationService: TranslationService) {
         self.translationService = translationService
@@ -25,7 +23,7 @@ class AppState: ObservableObject {
     func setup() {
         checkAccessibility()
         registerHotkey()
-        startPeriodicConnectionCheck()
+        Task { await translationService.loadModel() }
     }
 
     private func registerHotkey() {
@@ -38,7 +36,6 @@ class AppState: ObservableObject {
     }
 
     private func handleTranslation() async {
-        // Toggle: dismiss if popup is already visible
         if popupManager.isVisible {
             translationService.cancelTranslation()
             popupManager.dismiss()
@@ -69,7 +66,6 @@ class AppState: ObservableObject {
 
         await translationService.translate(text, from: sourceLanguage, to: targetLanguage)
 
-        // Save to history if translation succeeded
         if translationService.error == nil && !translationService.translatedText.isEmpty {
             history.add(
                 source: text,
@@ -89,16 +85,6 @@ class AppState: ObservableObject {
             return (.russian, .english)
         case .enToRu:
             return (.english, .russian)
-        }
-    }
-
-    private func startPeriodicConnectionCheck() {
-        connectionCheckTask?.cancel()
-        connectionCheckTask = Task {
-            while !Task.isCancelled {
-                isOllamaConnected = await translationService.checkConnection()
-                try? await Task.sleep(nanoseconds: 30_000_000_000) // 30s
-            }
         }
     }
 
