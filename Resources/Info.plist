@@ -3,7 +3,9 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>QuickTranslate</string>
+    <string>MacQuickTranslate</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
     <string>com.quicktranslate.app</string>
     <key>CFBundleVersion</key>
