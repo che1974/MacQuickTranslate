@@ -36,21 +36,23 @@ struct TranslationPopupView: View {
             }
 
             // Body: translated text or error
-            if let error = translationService.error {
-                Text(error.errorDescription ?? "Unknown error")
-                    .foregroundColor(.red)
-                    .font(.body)
-            } else if translationService.translatedText.isEmpty && translationService.isTranslating {
-                Text("Translating...")
-                    .foregroundColor(.secondary)
-                    .font(.body)
-            } else {
-                Text(translationService.translatedText)
-                    .font(.body)
-                    .textSelection(.enabled)
+            ScrollView {
+                if let error = translationService.error {
+                    Text(error.errorDescription ?? "Unknown error")
+                        .foregroundColor(.red)
+                        .font(.body)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else if translationService.translatedText.isEmpty && translationService.isTranslating {
+                    Text("Translating...")
+                        .foregroundColor(.secondary)
+                        .font(.body)
+                } else {
+                    Text(translationService.translatedText)
+                        .font(.body)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
-
-            Spacer(minLength: 4)
 
             // Bottom bar: copy button + char count
             HStack {
@@ -68,6 +70,6 @@ struct TranslationPopupView: View {
             }
         }
         .padding(12)
-        .frame(minWidth: 300, maxWidth: 480, minHeight: 100, maxHeight: 320)
+        .frame(minWidth: 300, maxWidth: 480, minHeight: 100, maxHeight: 500)
     }
 }

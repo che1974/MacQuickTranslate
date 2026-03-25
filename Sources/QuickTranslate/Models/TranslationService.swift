@@ -67,6 +67,12 @@ class TranslationService: ObservableObject {
         await loadModel()
     }
 
+    func unloadModel() {
+        cancelTranslation()
+        modelContainer = nil
+        modelState = .notLoaded
+    }
+
     func translate(_ text: String, from source: Language, to target: Language) async {
         guard let container = modelContainer, modelState == .ready else {
             error = .modelNotLoaded
@@ -105,8 +111,9 @@ class TranslationService: ObservableObject {
                 for try await result in stream {
                     if Task.isCancelled { break }
                     if let chunk = result.chunk {
-                        // Stop on end-of-turn token leaked into text
-                        if chunk.contains("<end_of_turn>") { break }
+                        // Stop on special tokens
+                        if chunk.contains("<end_of_turn>") || chunk.contains("<eos>") { break }
+
                         await MainActor.run {
                             self.translatedText += chunk
                         }

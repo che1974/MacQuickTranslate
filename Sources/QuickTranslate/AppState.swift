@@ -11,6 +11,10 @@ class AppState: ObservableObject {
     private let hotkeyManager = HotkeyManager()
     private let clipboardManager = ClipboardManager()
     private let popupManager = PopupWindowManager()
+    private var unloadTimer: Task<Void, Never>?
+
+    /// Minutes of inactivity before unloading the model
+    private let unloadDelayMinutes: UInt64 = 5
 
     init(translationService: TranslationService) {
         self.translationService = translationService
@@ -19,7 +23,6 @@ class AppState: ObservableObject {
     func setup() {
         checkAccessibility()
         registerHotkey()
-        Task { await translationService.loadModel() }
     }
 
     private func registerHotkey() {
@@ -59,7 +62,6 @@ class AppState: ObservableObject {
             source = sourceLanguageOverride
         }
 
-        // If source == target, flip to a sensible default
         let target = (source == targetLanguage)
             ? (source == .english ? Language.russian : Language.english)
             : targetLanguage
@@ -70,6 +72,11 @@ class AppState: ObservableObject {
             targetLanguage: target
         )
 
+        // Load model on demand if not ready
+        if translationService.modelState != .ready {
+            await translationService.loadModel()
+        }
+
         await translationService.translate(text, from: source, to: target)
 
         if translationService.error == nil && !translationService.translatedText.isEmpty {
@@ -79,6 +86,18 @@ class AppState: ObservableObject {
                 from: source,
                 to: target
             )
+        }
+
+        // Reset unload timer after each translation
+        scheduleUnload()
+    }
+
+    private func scheduleUnload() {
+        unloadTimer?.cancel()
+        unloadTimer = Task {
+            try? await Task.sleep(nanoseconds: unloadDelayMinutes * 60 * 1_000_000_000)
+            guard !Task.isCancelled else { return }
+            translationService.unloadModel()
         }
     }
 
