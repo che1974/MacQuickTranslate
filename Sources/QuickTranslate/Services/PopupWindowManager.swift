@@ -27,11 +27,12 @@ class PopupWindowManager {
 
         // Vibrancy background
         let visualEffect = NSVisualEffectView()
-        visualEffect.material = .hudWindow
+        visualEffect.material = .toolTip
+        visualEffect.appearance = NSAppearance(named: .darkAqua)
         visualEffect.state = .active
         visualEffect.blendingMode = .behindWindow
         visualEffect.wantsLayer = true
-        visualEffect.layer?.cornerRadius = 12
+        visualEffect.layer?.cornerRadius = 14
         visualEffect.layer?.masksToBounds = true
 
         let contentView = TranslationPopupView(
